@@ -7,9 +7,14 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.SystemClock;
+import android.view.View;
+import android.widget.AdapterView;
+import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.ImageView;
+import android.widget.Spinner;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -23,6 +28,11 @@ import androidx.lifecycle.ViewModelProvider;
 import com.vuzix.ultralite.LVGLImage;
 import com.vuzix.ultralite.UltraliteSDK;
 
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+
 /**
  * This class sets up a basic connection to the Z100 glasses using the ultralite SDK
  *
@@ -34,6 +44,11 @@ import com.vuzix.ultralite.UltraliteSDK;
 public class MainActivity extends AppCompatActivity {
 
     protected static final String TAG = MainActivity.class.getSimpleName();
+    private ArrayAdapter<String> adapter;
+    private List<String> dataList = new ArrayList<>();
+    private ExecutorService executorService = Executors.newSingleThreadExecutor();
+    private Handler mainHandler = new Handler(Looper.getMainLooper());
+    private Spinner spinner;
 
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
@@ -47,6 +62,28 @@ public class MainActivity extends AppCompatActivity {
         ImageView controlledImageView = findViewById(R.id.controlled);
         Button demoButton = findViewById(R.id.run_demo);
         Button notificationButton = findViewById(R.id.send_notification);
+        spinner  = findViewById(R.id.spinner);
+
+        adapter = new ArrayAdapter<String>(this, android.R.layout.simple_spinner_item, dataList);
+        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+        spinner.setAdapter(adapter);
+        loadData();
+
+        spinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+            @Override
+            public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
+                String selectedItem = parent.getItemAtPosition(position).toString();
+                CricinfoLive.selectedMatchIndex=position;
+                CricinfoLive.selectedMatchTitle = selectedItem;
+                Toast.makeText(MainActivity.this, "Selected: " + selectedItem, Toast.LENGTH_SHORT).show();
+                // Handle the selected item here
+            }
+
+            @Override
+            public void onNothingSelected(AdapterView<?> parent) {
+                // Another interface callback
+            }
+        });
 
         // Get the instance of the SDK
         UltraliteSDK ultralite = UltraliteSDK.get(this);
@@ -90,6 +127,31 @@ public class MainActivity extends AppCompatActivity {
         // Now set the click listeners to kick-off the two demos
         demoButton.setOnClickListener(v -> model.runDemo());
         notificationButton.setOnClickListener(v -> sendSampleNotification() );
+    }
+
+    private void loadData() {
+        executorService.execute(new Runnable() {
+            @Override
+            public void run() {
+                // Simulate fetching data from the internet (Cricinfo)
+                try {
+                    Thread.sleep(2000); // Simulate network delay
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+                final List<String> fetchedData = CricinfoLive.fetchLiveScores(); // Get data
+
+                mainHandler.post(new Runnable() {
+                    @Override
+                    public void run() {
+                        // Update the UI on the main thread
+                        dataList.clear();
+                        dataList.addAll(fetchedData);
+                        adapter.notifyDataSetChanged(); // Notify adapter about data changes
+                    }
+                });
+            }
+        });
     }
 
     /**
@@ -155,10 +217,6 @@ public class MainActivity extends AppCompatActivity {
                 if(haveControlOfGlasses) {
                     running.postValue(true);
                     try {
-                        DemoCanvasLayout.runDemo(getApplication(), this, ultralite);
-                        DemoScrollAutoScroller.runDemo(getApplication(), this, ultralite);
-                        DemoScrollLiveText.runDemo(getApplication(), this, ultralite);
-                        DemoScrollNative.runDemo(getApplication(), this, ultralite);
                         DemoTapInput.runDemo(getApplication(), this, ultralite);
 
                         // Always release control when finished drawing to the glasses
