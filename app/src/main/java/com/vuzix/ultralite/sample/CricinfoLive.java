@@ -20,11 +20,12 @@ public class CricinfoLive {
     public static ArrayList<MatchDetails> getLiveMatches(String htmlContent) {
         Log.d(TAG, "getLiveMatches(htmlContent) called");
         ArrayList<MatchDetails> matches = new ArrayList<>();
-        // The base URL is needed by Jsoup.parse to resolve relative URLs
-        Document doc = Jsoup.parse(htmlContent, CRICINFO_BASE_URL);
+        try {
+            // The base URL is needed by Jsoup.parse to resolve relative URLs
+            Document doc = Jsoup.parse(htmlContent, CRICINFO_BASE_URL);
 
-        // Attempt to find a container for all match cards. This is a guess.
-        // Common patterns involve divs with classes like "match-feed", "live-matches", "score-card-list"
+            // Attempt to find a container for all match cards. This is a guess.
+            // Common patterns involve divs with classes like "match-feed", "live-matches", "score-card-list"
         // Then, individual match elements often have classes like "match-card", "fixture", "list-item"
         // Let's try a general approach first, looking for elements that seem to contain match details.
         // Based on typical sports websites, match info is often in a structured list or series of cards.
@@ -118,6 +119,10 @@ public class CricinfoLive {
                 Log.d(TAG, "Skipping element, title or URL missing or invalid. Title: '" + title + "', URL: '" + matchUrl + "'");
             }
         }
+        } catch (Exception e) {
+            Log.e(TAG, "Error parsing live matches HTML: " + e.getMessage(), e);
+            // Optionally, return matches accumulated so far, or just an empty list
+        }
         // Removed catch (IOException e) because Jsoup.parse doesn't throw it for string input
         // Consider adding a general catch (Exception e) if complex parsing might fail
         Log.d(TAG, "getLiveMatches(htmlContent) finished, found " + matches.size() + " matches.");
@@ -129,7 +134,10 @@ public class CricinfoLive {
         Log.d(TAG, "getLiveMatches (network) called");
         try {
             Document doc = Jsoup.connect(CRICINFO_LIVE_SCORES_URL)
-                    .userAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36")
+                    .userAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+                    .header("Accept-Language", "en-US,en;q=0.9")
+                    .header("Accept-Encoding", "gzip, deflate, br")
+                    .header("Referer", "https://www.google.com/")
                     .get();
             Log.d(TAG, "Successfully fetched HTML from: " + CRICINFO_LIVE_SCORES_URL);
             return getLiveMatches(doc.html()); // Call the testable method
@@ -147,10 +155,11 @@ public class CricinfoLive {
     public static String getLiveScoreOfSelectedMatch(String matchUrl, String htmlContent) {
         Log.d(TAG, "getLiveScoreOfSelectedMatch(htmlContent) called for URL: " + matchUrl);
         String score = "Score not available";
-        Document doc = Jsoup.parse(htmlContent, matchUrl); // Use matchUrl as base URI for parsing this specific page
+        try {
+            Document doc = Jsoup.parse(htmlContent, matchUrl); // Use matchUrl as base URI for parsing this specific page
 
-        // Strategy to find the score:
-        // 1. Look for highly specific selectors that often contain live scores.
+            // Strategy to find the score:
+            // 1. Look for highly specific selectors that often contain live scores.
         // 2. If not found, try slightly more generic selectors related to scores or team info.
         // 3. As a fallback, look for text patterns matching cricket scores.
 
@@ -240,6 +249,10 @@ public class CricinfoLive {
                 Log.d(TAG, "No suitable score or status elements found after all attempts.");
             }
         }
+        } catch (Exception e) {
+            Log.e(TAG, "Error parsing score HTML for " + matchUrl + ": " + e.getMessage(), e);
+            // score remains "Score not available"
+        }
         Log.d(TAG, "Returning score for " + matchUrl + " from HTML content: " + score);
         return score;
 }
@@ -256,7 +269,10 @@ public static String getLiveScoreOfSelectedMatch(String matchUrl) {
 
     try {
         Document doc = Jsoup.connect(matchUrl)
-                .userAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36")
+                .userAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+                .header("Accept-Language", "en-US,en;q=0.9")
+                .header("Accept-Encoding", "gzip, deflate, br")
+                .header("Referer", "https://www.espncricinfo.com/") // Referer can be the site itself for internal navigation
                 .timeout(15000) // 15 seconds timeout
                 .get();
         Log.d(TAG, "Successfully fetched HTML from: " + matchUrl);
