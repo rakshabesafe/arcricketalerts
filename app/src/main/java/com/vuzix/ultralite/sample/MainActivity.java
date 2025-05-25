@@ -1,297 +1,135 @@
 package com.vuzix.ultralite.sample;
 
-import android.app.Application;
-import android.content.Context;
-import android.graphics.drawable.BitmapDrawable;
+import android.app.Activity;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
-import android.os.SystemClock;
-import android.service.autofill.FieldClassification;
+import android.util.Log;
 import android.view.View;
 import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
-import android.widget.Button;
-import android.widget.ImageView;
 import android.widget.Spinner;
 import android.widget.TextView;
 import android.widget.Toast;
-
-import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
-import androidx.appcompat.app.AppCompatActivity;
-import androidx.core.content.res.ResourcesCompat;
-import androidx.lifecycle.AndroidViewModel;
-import androidx.lifecycle.MutableLiveData;
-import androidx.lifecycle.Observer;
-import androidx.lifecycle.ViewModelProvider;
-
-import com.vuzix.ultralite.LVGLImage;
-import com.vuzix.ultralite.UltraliteSDK;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-/**
- * This class sets up a basic connection to the Z100 glasses using the ultralite SDK
- *
- * The primary role of this class is to monitor the Z100 state, and handle the request and release
- * of control.
- *
- * It also demonstrates sending notifications.
- */
-public class MainActivity extends AppCompatActivity {
+// Assuming R class is in this package or imported correctly.
+// import com.vuzix.ultralite.sample.R; // If R is not automatically found
 
-    protected static final String TAG = MainActivity.class.getSimpleName();
-    private ArrayAdapter<String> adapter;
-    private List<String> dataList = new ArrayList<>();
-    private ExecutorService executorService = Executors.newSingleThreadExecutor();
-    private Handler mainHandler = new Handler(Looper.getMainLooper());
-    private Spinner spinner;
+public class MainActivity extends Activity {
+
+    private static final String TAG = "MainActivity"; // For logging
+    private Spinner matchesSpinner;
+    private TextView scoreTextView;
+    private ArrayList<MatchDetails> liveMatchesList = new ArrayList<>(); // Store fetched matches
+
+    // Executor for background tasks
+    private final ExecutorService executorService = Executors.newSingleThreadExecutor();
+    private final Handler mainThreadHandler = new Handler(Looper.getMainLooper());
+
 
     @Override
-    protected void onCreate(@Nullable Bundle savedInstanceState) {
+    protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        setContentView(R.layout.main_activity);
+        // It's crucial that R.layout.activity_main refers to the XML file expected.
+        // If the user has a different main layout file name, this would need to be adjusted by them.
+        setContentView(R.layout.main_activity); 
 
-        ImageView installedImageView = findViewById(R.id.installed);
-        ImageView linkedImageView = findViewById(R.id.linked);
-        TextView nameTextView = findViewById(R.id.name);
-        ImageView connectedImageView = findViewById(R.id.connected);
-        ImageView controlledImageView = findViewById(R.id.controlled);
-        Button demoButton = findViewById(R.id.run_demo);
-        Button notificationButton = findViewById(R.id.send_notification);
-        spinner  = findViewById(R.id.spinner);
+        matchesSpinner = findViewById(R.id.matches_spinner);
+        scoreTextView = findViewById(R.id.score_textview);
 
-        adapter = new ArrayAdapter<String>(this, android.R.layout.simple_spinner_item, dataList);
-        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
-        spinner.setAdapter(adapter);
-        loadData();
+        // Set up the spinner with a default "Loading..." message initially
+        ArrayAdapter<String> initialAdapter = new ArrayAdapter<>(this, android.R.layout.simple_spinner_item, new String[]{"Loading matches..."});
+        initialAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+        matchesSpinner.setAdapter(initialAdapter);
+        matchesSpinner.setEnabled(false); // Disable spinner until data is loaded
 
-        spinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+        fetchMatchesAndUpdateSpinner();
+
+        matchesSpinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
             @Override
             public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
-                String selectedItem = parent.getItemAtPosition(position).toString();
-                CricinfoLive.selectedMatchIndex=position;
-                CricinfoLive.selectedMatchTitle = selectedItem;
-                Toast.makeText(MainActivity.this, "Selected: " + selectedItem, Toast.LENGTH_SHORT).show();
-                // Handle the selected item here
+                if (liveMatchesList != null && position >= 0 && position < liveMatchesList.size()) {
+                    MatchDetails selectedMatch = liveMatchesList.get(position);
+                    if (selectedMatch != null && selectedMatch.getScore() != null) {
+                         scoreTextView.setText(selectedMatch.getScore());
+                         Log.d(TAG, "Displaying score for: " + selectedMatch.getMatchTitle() + " - " + selectedMatch.getScore());
+                    } else if (selectedMatch != null) {
+                        scoreTextView.setText("Score not available for this match.");
+                         Log.d(TAG, "Score not available for: " + selectedMatch.getMatchTitle());
+                    }
+                } else {
+                     // This case handles selection of placeholder items like "No matches available"
+                     // or if liveMatchesList is unexpectedly empty when an item is somehow selected.
+                     String selectedItemText = parent.getItemAtPosition(position).toString();
+                     if (selectedItemText.equals("No matches available") ||
+                         selectedItemText.equals("Failed to load matches") ||
+                         selectedItemText.equals("Loading matches...")) {
+                          scoreTextView.setText(""); // Clear score if a placeholder is selected
+                     }
+                }
             }
 
             @Override
             public void onNothingSelected(AdapterView<?> parent) {
-                // Another interface callback
+                scoreTextView.setText(""); // Clear score if nothing is selected
             }
         });
-
-        // Get the instance of the SDK
-        UltraliteSDK ultralite = UltraliteSDK.get(this);
-
-        // Now we can use that instance to observe its state, and tie that to our demo app UI
-        ultralite.getAvailable().observe(this, available -> {
-            installedImageView.setImageResource(available ? R.drawable.ic_check_24 : R.drawable.ic_close_24);
-        });
-
-        ultralite.getLinked().observe(this, linked -> {
-            linkedImageView.setImageResource(linked ? R.drawable.ic_check_24 : R.drawable.ic_close_24);
-            nameTextView.setText(ultralite.getName());
-        });
-
-        ultralite.getConnected().observe(this, connected -> {
-            connectedImageView.setImageResource(connected ? R.drawable.ic_check_24 : R.drawable.ic_close_24);
-            demoButton.setEnabled(connected);
-            notificationButton.setEnabled(connected);
-        });
-
-        ultralite.getControlledByMe().observe(this, controlled -> {
-            // Always watch to see if you have lost control to another application. Our ViewModel
-            // observes this in controlledObserver, so this observer is just for the sake of
-            // our UI.
-            controlledImageView.setImageResource(controlled ? R.drawable.ic_check_24 : R.drawable.ic_close_24);
-            nameTextView.setText(ultralite.getName());
-        });
-
-        // For this example we use a ViewModel perform the logic of the test and report its state
-        DemoActivityViewModel model = new ViewModelProvider(this).get(DemoActivityViewModel.class);
-
-        // Update our "run" button based on the state of our demo
-        model.running.observe(this, running -> {
-            if (running) {
-                demoButton.setEnabled(false);
-            } else {
-                demoButton.setEnabled(ultralite.isConnected());
-            }
-        });
-
-        // Now set the click listeners to kick-off the two demos
-        demoButton.setOnClickListener(v -> model.runDemo());
-        notificationButton.setOnClickListener(v -> sendSampleNotification() );
     }
 
-    private void loadData() {
-        executorService.execute(new Runnable() {
-            @Override
-            public void run() {
-                // Simulate fetching data from the internet (Cricinfo)
-                try {
-                    Thread.sleep(2000); // Simulate network delay
-                } catch (InterruptedException e) {
-                    e.printStackTrace();
-                }
-                List<MatchDetails> matchDetails=CricinfoLive.getLiveMatches();
-                final List<String> fetchedData= new ArrayList<>();
-                for(MatchDetails matchDetails1:matchDetails) {
-                    fetchedData.add(matchDetails1.getMatchTitle());
-                }
+    private void fetchMatchesAndUpdateSpinner() {
+        executorService.execute(() -> {
+            final ArrayList<MatchDetails> fetchedMatches = CricinfoLive.getLiveMatchesFromRSS();
 
-                mainHandler.post(new Runnable() {
-                    @Override
-                    public void run() {
-                        // Update the UI on the main thread
-                        dataList.clear();
-                        dataList.addAll(fetchedData);
-                        adapter.notifyDataSetChanged(); // Notify adapter about data changes
+            mainThreadHandler.post(() -> {
+                liveMatchesList.clear();
+                if (fetchedMatches != null && !fetchedMatches.isEmpty()) {
+                    liveMatchesList.addAll(fetchedMatches);
+                    List<String> matchTitles = new ArrayList<>();
+                    for (MatchDetails match : liveMatchesList) {
+                        matchTitles.add(match.getMatchTitle());
                     }
-                });
-            }
+                    ArrayAdapter<String> adapter = new ArrayAdapter<>(MainActivity.this,
+                            android.R.layout.simple_spinner_item, matchTitles);
+                    adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+                    matchesSpinner.setAdapter(adapter);
+                    matchesSpinner.setEnabled(true);
+                    
+                    if (!liveMatchesList.isEmpty()) {
+                        matchesSpinner.setSelection(0); 
+                        // Score for the first item will be set by onItemSelected listener
+                    } else {
+                         scoreTextView.setText(""); 
+                    }
+                } else {
+                    List<String> statusMessages = new ArrayList<>();
+                    if (fetchedMatches == null) { 
+                        statusMessages.add("Failed to load matches");
+                        Toast.makeText(MainActivity.this, "Error fetching matches. Check network.", Toast.LENGTH_LONG).show();
+                    } else { 
+                        statusMessages.add("No matches available");
+                        Toast.makeText(MainActivity.this, "No live matches found.", Toast.LENGTH_LONG).show();
+                    }
+                    ArrayAdapter<String> statusAdapter = new ArrayAdapter<>(MainActivity.this,
+                            android.R.layout.simple_spinner_item, statusMessages);
+                    statusAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+                    matchesSpinner.setAdapter(statusAdapter);
+                    matchesSpinner.setEnabled(false); 
+                    scoreTextView.setText(""); 
+                }
+            });
         });
     }
 
-    /**
-     * Sending a notification is by far the simplest mechanism to put content on the glasses.
-     *
-     * By default, the Android app may be listening to notifications from all system apps and
-     * sending it to the glasses. But the user can control this behavior.
-     *
-     * We can programmatically send the same notification to the glasses that does NOT need to notify
-     * the rest of the phone. That's a great way to get content on the screen.
-     *
-     * If nothing has control, the notification shows full-screen.  But if something else has control
-     * this notification may "peek" a shorter version from the top of the screen.
-     *
-     * When you run this demo, try hitting the "send notification" button while the app is idle, and
-     * while a demo is running to see the difference.
-     */
-    private void sendSampleNotification() {
-        UltraliteSDK ultralite = UltraliteSDK.get(this);
-        ultralite.sendNotification("Ultralite SDK Sample", "Hello from a sample app!",
-                loadLVGLImage(this, R.drawable.rocket, false));
-    }
-
-    /**
-     * This ViewModel will hold our state during the demo.
-     */
-    public static class DemoActivityViewModel extends AndroidViewModel {
-
-        private final UltraliteSDK ultralite;
-
-        private final MutableLiveData<Boolean> running = new MutableLiveData<>();
-        private boolean haveControlOfGlasses;
-
-        public DemoActivityViewModel(@NonNull Application application) {
-            super(application);
-            ultralite = UltraliteSDK.get(application);
-            ultralite.getControlledByMe().observeForever(controlledObserver);
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        if (executorService != null && !executorService.isShutdown()) {
+            executorService.shutdown();
         }
-
-        @Override
-        protected void onCleared() {
-            ultralite.releaseControl();
-            // We can delay removing the observer to allow us to be notified of losing control
-            // Or we could have just set our state from here.
-            new Handler(Looper.getMainLooper()).postDelayed(() ->
-                    ultralite.getControlledByMe().removeObserver(controlledObserver), 500);
-        }
-
-        // We will demonstrate the glasses functionality from a single worker thread. Typically
-        // an application will have other logic that drives the UI, and the Z100 output will be
-        // driven by that.
-        private void runDemo() {
-            if (haveControlOfGlasses) {
-                startDemoThread();
-            } else {
-                ultralite.requestControl();
-            }
-        }
-
-        private void startDemoThread() {
-            new Thread(() -> {
-                // Always be sure we have control before any drawing starts
-                if(haveControlOfGlasses) {
-                    running.postValue(true);
-                    try {
-                        DemoTapInput.runDemo(getApplication(), this, ultralite);
-
-                        // Always release control when finished drawing to the glasses
-                        ultralite.releaseControl();
-                        ultralite.sendNotification("Demo Success", "The demo is over");
-                    } catch (Stop stop) {
-                        ultralite.releaseControl(); // Release when aborting, too.
-                        if (stop.error) {
-                            ultralite.sendNotification("Demo Error", "An error occurred during the demo");
-                        } else {
-                            ultralite.sendNotification("Demo Control Lost", "The demo lost control of the glasses");
-                        }
-                    }
-                    running.postValue(false);
-                }
-            }).start();
-        }
-
-        // This is a convenience class to pause our thread and generate a Stop exception if the
-        // user wants to abort
-        public void pause() throws Stop {
-            pause(2000);
-        }
-
-        // This is a convenience class to pause our thread and generate a Stop exception if the
-        // user wants to abort
-        public void pause(long ms) throws Stop {
-            SystemClock.sleep(ms);
-            if (!haveControlOfGlasses) {
-                // Throw Stop when we lose control
-                throw new Stop(false);
-            }
-        }
-
-        private final Observer<Boolean> controlledObserver = controlled -> {
-            if (controlled) {
-                // We wait to start the demo until the SDK confirms we have received control.
-                haveControlOfGlasses = true;
-                startDemoThread();
-            } else {
-                // If we later lose control of the glasses we stop the demo. (Your app may choose to
-                // continue running without the glasses UI and wait for them to reconnect to begin,
-                // streaming to them again.).
-                haveControlOfGlasses = false;
-            }
-        };
-    }
-
-    /**
-     * This exception is our mechanism to detect when the user wants to abort the demo
-     */
-    public static class Stop extends Exception {
-        private final boolean error;
-        public Stop(boolean error) {
-            this.error = error;
-        }
-    }
-
-    /**
-     * This is a convenience method to get LVGL images from resources
-     * @param context Application context
-     * @param resource Resource ID of a bitmap
-     * @param singleBit True to render as single-bit (black and white) only. This is the smallest
-     *                  and fastest way to send images. False for 2-bit per pixel.
-     * @return LVGLImage at the original bitmap dimensions
-     */
-    static LVGLImage loadLVGLImage(Context context, int resource, boolean singleBit) {
-        BitmapDrawable drawable = (BitmapDrawable) ResourcesCompat.getDrawable(
-                context.getResources(), resource, context.getTheme());
-        int colorSpace = singleBit ? LVGLImage.CF_INDEXED_1_BIT : LVGLImage.CF_INDEXED_2_BIT ;
-        return LVGLImage.fromBitmap(drawable.getBitmap(), colorSpace);
     }
 }

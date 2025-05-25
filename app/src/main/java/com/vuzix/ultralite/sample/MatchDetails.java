@@ -4,10 +4,12 @@ public class MatchDetails {
 
     private final String matchTitle;
     private final String matchUrl;
+    private final String score;
 
-    public MatchDetails(String matchTitle, String matchUrl) {
+    public MatchDetails(String matchTitle, String matchUrl, String score) {
         this.matchTitle = matchTitle;
         this.matchUrl = matchUrl;
+        this.score = score;
     }
 
     public String getMatchTitle() {
@@ -16,5 +18,9 @@ public class MatchDetails {
 
     public String getMatchUrl() {
         return matchUrl;
+    }
+
+    public String getScore() {
+        return score;
     }
 }
