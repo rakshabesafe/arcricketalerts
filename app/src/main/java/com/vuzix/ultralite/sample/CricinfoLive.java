@@ -8,12 +8,25 @@ import org.jsoup.nodes.Element;
 import org.jsoup.select.Elements;
 
 import java.io.IOException;
+import java.net.CookieManager;
+import java.net.CookiePolicy;
+import java.net.CookieStore;
 import java.util.ArrayList;
 import java.util.List;
 
 
 public class CricinfoLive {
     private static final String TAG = "CricinfoFetcher";
+
+    private static CookieStore cookieStore;
+    static {
+        // Initialize a non-null cookieStore.
+        // Jsoup will use this to store and send cookies.
+        CookieManager manager = new CookieManager();
+        manager.setCookiePolicy(CookiePolicy.ACCEPT_ALL);
+        cookieStore = manager.getCookieStore();
+    }
+
     private static final String CRICINFO_BASE_URL = "https://www.espncricinfo.com";
     private static final String CRICINFO_LIVE_SCORES_URL = CRICINFO_BASE_URL + "/live-cricket-score";
 
@@ -130,7 +143,21 @@ public class CricinfoLive {
         Log.d(TAG, "getLiveMatches (network) called");
         try {
             Document doc = Jsoup.connect(CRICINFO_LIVE_SCORES_URL)
-                    .userAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36")
+                    .userAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36")
+                    .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7")
+                    .header("Accept-Language", "en-US,en;q=0.9")
+                    .header("Accept-Encoding", "gzip, deflate, br, zstd")
+                    .header("Referer", "https://www.espncricinfo.com/")
+                    .header("DNT", "1")
+                    .header("Upgrade-Insecure-Requests", "1")
+                    .header("sec-ch-ua", "\"Chromium\";v=\"136\", \"Google Chrome\";v=\"136\", \"Not.A/Brand\";v=\"99\"")
+                    .header("sec-ch-ua-mobile", "?0")
+                    .header("sec-ch-ua-platform", "\"Windows\"")
+                    .header("sec-fetch-dest", "document")
+                    .header("sec-fetch-mode", "navigate")
+                    .header("sec-fetch-site", "none")
+                    .header("sec-fetch-user", "?1")
+                    .cookieStore(cookieStore)
                     .get();
             Log.d(TAG, "Successfully fetched HTML from: " + CRICINFO_LIVE_SCORES_URL);
             return getLiveMatches(doc.html()); // Call the testable method
@@ -257,7 +284,21 @@ public static String getLiveScoreOfSelectedMatch(String matchUrl) {
 
     try {
         Document doc = Jsoup.connect(matchUrl)
-                .userAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36")
+                .userAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36")
+                .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7")
+                .header("Accept-Language", "en-US,en;q=0.9")
+                .header("Accept-Encoding", "gzip, deflate, br, zstd")
+                .header("Referer", "https://www.espncricinfo.com/") // You can use the base URL as a referer for match-specific pages too
+                .header("DNT", "1")
+                .header("Upgrade-Insecure-Requests", "1")
+                .header("sec-ch-ua", "\"Chromium\";v=\"136\", \"Google Chrome\";v=\"136\", \"Not.A/Brand\";v=\"99\"")
+                .header("sec-ch-ua-mobile", "?0")
+                .header("sec-ch-ua-platform", "\"Windows\"")
+                .header("sec-fetch-dest", "document")
+                .header("sec-fetch-mode", "navigate")
+                .header("sec-fetch-site", "none")
+                .header("sec-fetch-user", "?1")
+                .cookieStore(cookieStore)
                 .timeout(15000) // 15 seconds timeout
                 .get();
         Log.d(TAG, "Successfully fetched HTML from: " + matchUrl);
