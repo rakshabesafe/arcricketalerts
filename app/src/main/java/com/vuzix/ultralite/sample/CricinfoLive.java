@@ -9,25 +9,11 @@ import org.jsoup.parser.Parser;
 import org.jsoup.select.Elements;
 
 import java.io.IOException;
-import java.net.CookieManager;
-import java.net.CookiePolicy;
-import java.net.CookieStore;
 import java.util.ArrayList;
-import java.util.List;
 
 
 public class CricinfoLive {
     private static final String TAG = "CricinfoFetcher";
-
-    private static CookieStore cookieStore;
-    static {
-        // Initialize a non-null cookieStore.
-        // Jsoup will use this to store and send cookies.
-        CookieManager manager = new CookieManager();
-        manager.setCookiePolicy(CookiePolicy.ACCEPT_ALL);
-        cookieStore = manager.getCookieStore();
-    }
-
     private static final String CRICINFO_BASE_URL = "https://www.espncricinfo.com";
     private static final String CRICINFO_LIVE_SCORES_URL = CRICINFO_BASE_URL + "/live-cricket-score";
     private static final String CRICINFO_RSS_LIVE_SCORES_URL = "https://www.espncricinfo.com/rss/livescores.xml";
@@ -149,23 +135,12 @@ public class CricinfoLive {
     public static ArrayList<MatchDetails> getLiveMatches() {
         Log.d(TAG, "getLiveMatches (network) called");
         try {
-            Document doc = Jsoup.connect(CRICINFO_LIVE_SCORES_URL)     
-                    .followRedirects(true) // Add this line
-                    .userAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36")
-                    .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7")
+            Document doc = Jsoup.connect(CRICINFO_LIVE_SCORES_URL)
+                    .userAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
                     .header("Accept-Language", "en-US,en;q=0.9")
-                    .header("Accept-Encoding", "gzip, deflate, br, zstd")
-                    .header("Referer", "https://www.espncricinfo.com/")
-                    .header("DNT", "1")
-                    .header("Upgrade-Insecure-Requests", "1")
-                    .header("sec-ch-ua", "\"Chromium\";v=\"136\", \"Google Chrome\";v=\"136\", \"Not.A/Brand\";v=\"99\"")
-                    .header("sec-ch-ua-mobile", "?0")
-                    .header("sec-ch-ua-platform", "\"Windows\"")
-                    .header("sec-fetch-dest", "document")
-                    .header("sec-fetch-mode", "navigate")
-                    .header("sec-fetch-site", "none")
-                    .header("sec-fetch-user", "?1")
-                    .cookieStore(cookieStore)
+                    .header("Accept-Encoding", "gzip, deflate, br")
+                    .header("Referer", "https://www.google.com/")
+                    .followRedirects(true) // Add this line
                     .get();
             Log.d(TAG, "Successfully fetched HTML from: " + CRICINFO_LIVE_SCORES_URL);
             return getLiveMatches(doc.html()); // Call the testable method
@@ -193,15 +168,24 @@ public class CricinfoLive {
             Log.d(TAG, "Found " + items.size() + " items in RSS feed.");
 
             for (Element item : items) {
-                String title = item.select("title").text();
-                String link = item.select("link").text();
+                String title = item.selectFirst("title").text(); // Use selectFirst for safety
+                String link = item.selectFirst("link").text(); // Use selectFirst for safety
+
+                Element descriptionElement = item.selectFirst("description");
+                String scoreText = "Score not available"; // Default value
+                if (descriptionElement != null) {
+                    String tempScore = descriptionElement.text().trim();
+                    if (tempScore != null && !tempScore.isEmpty()) {
+                        scoreText = tempScore;
+                    }
+                }
 
                 if (title != null && !title.isEmpty() && link != null && !link.isEmpty()) {
                     // RSS links are usually absolute, no need to resolve with base URL normally
-                    matches.add(new MatchDetails(title, link));
-                    Log.d(TAG, "Found match via RSS: " + title + " - " + link);
+                    matches.add(new MatchDetails(title, link, scoreText));
+                    Log.d(TAG, "Found match via RSS: " + title + " - " + link + " - Score: " + scoreText);
                 } else {
-                    Log.w(TAG, "Skipping RSS item with missing title or link. Title: '" + title + "', Link: '" + link + "'");
+                    Log.w(TAG, "Skipping RSS item with missing title or link. Title: '" + title + "', Link: '" + link + "', Score: " + scoreText);
                 }
             }
         } catch (IOException e) {
@@ -337,21 +321,10 @@ public static String getLiveScoreOfSelectedMatch(String matchUrl) {
 
     try {
         Document doc = Jsoup.connect(matchUrl)
-                .userAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36")
-                .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7")
+                .userAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
                 .header("Accept-Language", "en-US,en;q=0.9")
-                .header("Accept-Encoding", "gzip, deflate, br, zstd")
-                .header("Referer", "https://www.espncricinfo.com/") // You can use the base URL as a referer for match-specific pages too
-                .header("DNT", "1")
-                .header("Upgrade-Insecure-Requests", "1")
-                .header("sec-ch-ua", "\"Chromium\";v=\"136\", \"Google Chrome\";v=\"136\", \"Not.A/Brand\";v=\"99\"")
-                .header("sec-ch-ua-mobile", "?0")
-                .header("sec-ch-ua-platform", "\"Windows\"")
-                .header("sec-fetch-dest", "document")
-                .header("sec-fetch-mode", "navigate")
-                .header("sec-fetch-site", "none")
-                .header("sec-fetch-user", "?1")
-                .cookieStore(cookieStore)
+                .header("Accept-Encoding", "gzip, deflate, br")
+                .header("Referer", "https://www.espncricinfo.com/") // Referer can be the site itself for internal navigation
                 .timeout(15000) // 15 seconds timeout
                 .followRedirects(true) // Add this line
                 .get();
@@ -364,15 +337,4 @@ public static String getLiveScoreOfSelectedMatch(String matchUrl) {
     }
     return score; // Return default score on error
 }
-
-public static List<String> fetchLiveScores() {
-    List<MatchDetails> matchDetails=CricinfoLive.getLiveMatches();
-    final List<String> fetchedData= new ArrayList<>();
-    for(MatchDetails matchDetails1:matchDetails) {
-        fetchedData.add(matchDetails1.getMatchTitle());
-    }
-    return fetchedData;
-}
-
-
 }

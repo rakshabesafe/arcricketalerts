@@ -108,11 +108,33 @@
                 tools:ignore="ContentDescription" />
         </LinearLayout>
 
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Select a Match:"
+            android:textSize="18sp"
+            android:layout_marginTop="10dp"/>
 
         <Spinner
-            android:id="@+id/spinner"
+            android:id="@+id/matches_spinner"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content" />
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Score:"
+            android:textSize="18sp"
+            android:layout_marginTop="16dp" />
+
+        <TextView
+            android:id="@+id/score_textview"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:textSize="16sp"
+            tools:text="Score will appear here" />
 
         <Button
             android:id="@+id/run_demo"
