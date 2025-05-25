@@ -7,6 +7,7 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.SystemClock;
+import android.service.autofill.FieldClassification;
 import android.view.View;
 import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
@@ -139,7 +140,11 @@ public class MainActivity extends AppCompatActivity {
                 } catch (InterruptedException e) {
                     e.printStackTrace();
                 }
-                final List<String> fetchedData = CricinfoLive.fetchLiveScores(); // Get data
+                List<MatchDetails> matchDetails=CricinfoLive.getLiveMatches();
+                final List<String> fetchedData= new ArrayList<>();
+                for(MatchDetails matchDetails1:matchDetails) {
+                    fetchedData.add(matchDetails1.getMatchTitle());
+                }
 
                 mainHandler.post(new Runnable() {
                     @Override
