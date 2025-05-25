@@ -9,6 +9,7 @@ import org.jsoup.select.Elements;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.List;
 
 
 public class CricinfoLive {
@@ -268,4 +269,15 @@ public static String getLiveScoreOfSelectedMatch(String matchUrl) {
     }
     return score; // Return default score on error
 }
+
+public static List<String> fetchLiveScores() {
+    List<MatchDetails> matchDetails=CricinfoLive.getLiveMatches();
+    final List<String> fetchedData= new ArrayList<>();
+    for(MatchDetails matchDetails1:matchDetails) {
+        fetchedData.add(matchDetails1.getMatchTitle());
+    }
+    return fetchedData;
+}
+
+
 }
