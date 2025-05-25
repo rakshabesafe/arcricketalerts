@@ -14,6 +14,6 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "Ultralite SDK Sample"
+rootProject.name = "ArCricketAlert"
 include(":app")
  
