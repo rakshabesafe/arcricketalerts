@@ -5,6 +5,7 @@ import android.util.Log;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
+import org.jsoup.parser.Parser;
 import org.jsoup.select.Elements;
 
 import java.io.IOException;
@@ -15,6 +16,7 @@ public class CricinfoLive {
     private static final String TAG = "CricinfoFetcher";
     private static final String CRICINFO_BASE_URL = "https://www.espncricinfo.com";
     private static final String CRICINFO_LIVE_SCORES_URL = CRICINFO_BASE_URL + "/live-cricket-score";
+    private static final String CRICINFO_RSS_LIVE_SCORES_URL = "https://www.espncricinfo.com/rss/livescores.xml";
 
     // Testable method with HTML content as input
     public static ArrayList<MatchDetails> getLiveMatches(String htmlContent) {
@@ -138,6 +140,7 @@ public class CricinfoLive {
                     .header("Accept-Language", "en-US,en;q=0.9")
                     .header("Accept-Encoding", "gzip, deflate, br")
                     .header("Referer", "https://www.google.com/")
+                    .followRedirects(true) // Add this line
                     .get();
             Log.d(TAG, "Successfully fetched HTML from: " + CRICINFO_LIVE_SCORES_URL);
             return getLiveMatches(doc.html()); // Call the testable method
@@ -145,6 +148,46 @@ public class CricinfoLive {
             Log.e(TAG, "Error fetching live matches from network: " + e.getMessage());
             return new ArrayList<>(); // Return empty list on network error
         }
+    }
+
+    public static ArrayList<MatchDetails> getLiveMatchesFromRSS() {
+        Log.d(TAG, "getLiveMatchesFromRSS called");
+        ArrayList<MatchDetails> matches = new ArrayList<>();
+        try {
+            String xmlString = Jsoup.connect(CRICINFO_RSS_LIVE_SCORES_URL)
+                    .userAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+                    .header("Accept-Language", "en-US,en;q=0.9")
+                    .header("Accept-Encoding", "gzip, deflate, br")
+                    .header("Referer", "https://www.google.com/") // General referer
+                    .timeout(15000) // 15 seconds timeout
+                    .execute()
+                    .body();
+
+            Document doc = Jsoup.parse(xmlString, "", Parser.xmlParser());
+            Elements items = doc.select("item");
+            Log.d(TAG, "Found " + items.size() + " items in RSS feed.");
+
+            for (Element item : items) {
+                String title = item.select("title").text();
+                String link = item.select("link").text();
+
+                if (title != null && !title.isEmpty() && link != null && !link.isEmpty()) {
+                    // RSS links are usually absolute, no need to resolve with base URL normally
+                    matches.add(new MatchDetails(title, link));
+                    Log.d(TAG, "Found match via RSS: " + title + " - " + link);
+                } else {
+                    Log.w(TAG, "Skipping RSS item with missing title or link. Title: '" + title + "', Link: '" + link + "'");
+                }
+            }
+        } catch (IOException e) {
+            Log.e(TAG, "IOException fetching or parsing RSS feed: " + e.getMessage(), e);
+            return new ArrayList<>(); // Return empty list on network error
+        } catch (Exception e) {
+            Log.e(TAG, "Exception parsing RSS feed: " + e.getMessage(), e);
+            return new ArrayList<>(); // Return empty list on parsing error
+        }
+        Log.d(TAG, "getLiveMatchesFromRSS finished, found " + matches.size() + " matches.");
+        return matches;
     }
 
     protected static int selectedMatchIndex=0;
@@ -274,6 +317,7 @@ public static String getLiveScoreOfSelectedMatch(String matchUrl) {
                 .header("Accept-Encoding", "gzip, deflate, br")
                 .header("Referer", "https://www.espncricinfo.com/") // Referer can be the site itself for internal navigation
                 .timeout(15000) // 15 seconds timeout
+                .followRedirects(true) // Add this line
                 .get();
         Log.d(TAG, "Successfully fetched HTML from: " + matchUrl);
         return getLiveScoreOfSelectedMatch(matchUrl, doc.html()); // Call the testable method
